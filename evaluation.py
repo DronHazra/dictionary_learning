@@ -3,7 +3,7 @@ Utilities for evaluating dictionaries on a model and datset.
 """
 
 import torch as t
-from .training import sae_loss
+from training import sae_loss
 import matplotlib.pyplot as plt
 
 

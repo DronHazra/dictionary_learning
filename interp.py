@@ -5,9 +5,9 @@ import io
 import random
 from tqdm import tqdm
 from nnsight import LanguageModel
-from dictionary_learning.buffer import ActivationBuffer
-from dictionary_learning.dictionary import AutoEncoder
-from dictionary_learning.training import trainSAE
+from buffer import ActivationBuffer
+from dictionary import AutoEncoder
+from training import trainSAE
 from collections import defaultdict
 from circuitsvis.activations import text_neuron_activations
 from circuitsvis.topk_tokens import topk_tokens

@@ -3,8 +3,8 @@ Training dictionaries
 """
 
 import torch as t
-from .dictionary import AutoEncoder
-from .buffer import ActivationBuffer
+from dictionary import AutoEncoder
+from buffer import ActivationBuffer
 import os
 from tqdm import tqdm
 
@@ -135,6 +135,7 @@ def trainSAE(
     scheduler = t.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_fn)
 
     for step, acts in enumerate(tqdm(activations, total=steps)):
+        print(step)
         if steps is not None and step >= steps:
             break
 
@@ -165,7 +166,6 @@ def trainSAE(
                     if deads.sum() > 0:
                         print(f"resampling {deads.sum().item()} dead neurons")
                         resample_neurons(deads, acts, ae, optimizer)
-
         # logging
         if log_steps is not None and step % log_steps == 0:
             with t.no_grad():
