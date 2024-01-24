@@ -3,6 +3,7 @@ import zstandard as zstd
 import json
 import io
 from nnsight import LanguageModel
+from tqdm import tqdm
 
 """
 Implements a buffer of activations
@@ -81,7 +82,6 @@ class ActivationBuffer:
         """
         Return a batch of activations
         """
-        print("calling next on activation buffer")
         with t.no_grad():
             # if buffer is less than half full, refresh
             if (~self.read).sum() < self.n_ctxs * self.ctx_len // 2:
@@ -128,24 +128,26 @@ class ActivationBuffer:
         For when io == 'in' or 'out'
         """
         self.activations = self.activations[~self.read]
+        with tqdm(total = self.n_ctxs * self.ctx_len) as pbar:
+            pbar.update(len(self.activations))
+            while len(self.activations) < self.n_ctxs * self.ctx_len:
+                tokens = self.tokenized_batch()["input_ids"]
 
-        while len(self.activations) < self.n_ctxs * self.ctx_len:
-            tokens = self.tokenized_batch()["input_ids"]
-
-            with self.model.generate(
-                max_new_tokens=1, pad_token_id=self.model.tokenizer.pad_token_id
-            ) as generator:
-                with generator.invoke(tokens) as invoker:
-                    if self.io == "in":
-                        hidden_states = self.submodule.input.save()
-                    else:
-                        hidden_states = self.submodule.output.save()
-            hidden_states = hidden_states.value
-            if isinstance(hidden_states, tuple):
-                hidden_states = hidden_states[0]
-            hidden_states = hidden_states[tokens != self.model.tokenizer.pad_token_id]
-            self.activations = t.cat([self.activations, hidden_states.to("cpu")], dim=0)
-            self.read = t.zeros(len(self.activations)).bool()
+                with self.model.generate(
+                    max_new_tokens=1, pad_token_id=self.model.tokenizer.pad_token_id
+                ) as generator:
+                    with generator.invoke(tokens) as invoker:
+                        if self.io == "in":
+                            hidden_states = self.submodule.input.save()
+                        else:
+                            hidden_states = self.submodule.output.save()
+                hidden_states = hidden_states.value
+                if isinstance(hidden_states, tuple):
+                    hidden_states = hidden_states[0]
+                hidden_states = hidden_states[tokens != self.model.tokenizer.pad_token_id]
+                self.activations = t.cat([self.activations, hidden_states.to("cpu")], dim=0)
+                self.read = t.zeros(len(self.activations)).bool()
+                pbar.update(len(hidden_states))
         self.current_mean = self.activations.mean(dim=0)
 
     def _refresh_in_to_out(self):
@@ -187,14 +189,14 @@ class ActivationBuffer:
         """
         Refresh the buffer
         """
-        # print("refreshing buffer...")
+        print("refreshing buffer...")
 
         if self.io == "in" or self.io == "out":
             self._refresh_std()
         else:
             self._refresh_in_to_out()
 
-        # print('buffer refreshed...')
+        print('buffer refreshed...')
 
     def close(self):
         """

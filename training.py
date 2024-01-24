@@ -7,6 +7,7 @@ from dictionary import AutoEncoder
 from buffer import ActivationBuffer
 import os
 from tqdm import tqdm
+import wandb
 
 class ConstrainedAdam(t.optim.Adam):
     """
@@ -135,7 +136,6 @@ def trainSAE(
     scheduler = t.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_fn)
 
     for step, acts in enumerate(tqdm(activations, total=steps)):
-        print(step)
         if steps is not None and step >= steps:
             break
 
@@ -170,6 +170,7 @@ def trainSAE(
         if log_steps is not None and step % log_steps == 0:
             with t.no_grad():
                 mse_loss, sparsity_loss = sae_loss(acts, ae, sparsity_penalty, entropy, separate=True)
+                wandb.log({"mse_loss": mse_loss, "sparsity_loss": sparsity_loss})
                 print(f"step {step} MSE loss: {mse_loss}, sparsity loss: {sparsity_loss}")
                 # dict_acts = ae.encode(acts)
                 # print(f"step {step} % inactive: {(dict_acts == 0).all(dim=0).sum() / dict_acts.shape[-1]}")
