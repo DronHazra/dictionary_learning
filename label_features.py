@@ -1,5 +1,5 @@
-from dictionary import AutoEncoder
-from buffer import ActivationBuffer
+from .dictionary import AutoEncoder
+from .buffer import ActivationBuffer
 
 import os
 import torch as t

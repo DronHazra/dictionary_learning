@@ -31,10 +31,13 @@ class AutoEncoder(Dictionary, nn.Module):
     """
     A one-layer autoencoder.
     """
-    def __init__(self, activation_dim, dict_size):
+    def __init__(self, activation_dim, dict_size, use_batchnorm=False):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = dict_size
+        self.use_batchnorm = use_batchnorm
+        if use_batchnorm:
+            self.batchnorm = nn.BatchNorm1d(activation_dim, affine=False)
         self.bias = nn.Parameter(t.zeros(activation_dim))
         self.encoder = nn.Linear(activation_dim, dict_size, bias=True)
 
@@ -45,7 +48,10 @@ class AutoEncoder(Dictionary, nn.Module):
         self.decoder.weight = nn.Parameter(dec_weight)
 
     def encode(self, x):
-        return nn.ReLU()(self.encoder(x - self.bias))
+        if self.use_batchnorm:
+            return nn.ReLU()(self.encoder(self.batchnorm(x) - self.bias))
+        else:
+            return nn.ReLU()(self.encoder(x - self.bias))
     
     def decode(self, f):
         return self.decoder(f) + self.bias

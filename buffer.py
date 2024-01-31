@@ -23,6 +23,7 @@ class ActivationBuffer:
         ctx_len=128,  # length of each context
         in_batch_size=512,  # size of batches in which to process the data when adding to buffer
         out_batch_size=8192,  # size of batches in which to return activations
+        mean_centering=False
     ):
         if io == "in":
             if in_feats is None:
@@ -33,7 +34,9 @@ class ActivationBuffer:
                         "in_feats cannot be inferred and must be specified directly"
                     )
             self.activations = t.empty(0, in_feats)
-            self.current_mean = t.empty(in_feats)
+            if mean_centering:
+                self.current_mean = t.empty(in_feats)
+                self.batchnorm = t.nn.BatchNorm1d(in_feats, affine=False)
 
         elif io == "out":
             if out_feats is None:
@@ -44,7 +47,10 @@ class ActivationBuffer:
                         "out_feats cannot be inferred and must be specified directly"
                     )
             self.activations = t.empty(0, out_feats)
-            self.current_mean = t.empty(out_feats)
+            if mean_centering:
+                self.current_mean = t.empty(out_feats)
+                self.batchnorm = t.nn.BatchNorm1d(out_feats, affine=False)
+
         elif io == "in_to_out":
             if in_feats is None:
                 try:
@@ -62,8 +68,12 @@ class ActivationBuffer:
                     )
             self.activations_in = t.empty(0, in_feats)
             self.activations_out = t.empty(0, out_feats)
-            self.current_in_mean = t.empty(in_feats)
-            self.current_out_mean = t.empty(out_feats)
+            if mean_centering:
+                self.current_in_mean = t.empty(in_feats)
+                self.current_out_mean = t.empty(out_feats)
+                self.batchnorm_in = t.nn.BatchNorm1d(in_feats, affine=False)
+                self.batchnorm_out = t.nn.BatchNorm1d(out_feats, affine=False)
+
         self.read = t.zeros(0).bool()
 
         self.data = data
@@ -74,6 +84,7 @@ class ActivationBuffer:
         self.ctx_len = ctx_len
         self.in_batch_size = in_batch_size
         self.out_batch_size = out_batch_size
+        self.mean_centering = mean_centering
 
     def __iter__(self):
         return self
@@ -92,12 +103,21 @@ class ActivationBuffer:
             idxs = unreads[t.randperm(len(unreads))[: self.out_batch_size]]
             self.read[idxs] = True
             if self.io in ["in", "out"]:
-                return self.activations[idxs] - self.current_mean
+                if self.mean_centering:
+                    return self.activations[idxs] - self.batchnorm.running_mean
+                else:
+                    return self.activations[idxs]
             else:
-                return (
-                    self.activations_in[idxs] - self.current_in_mean,
-                    self.activations_out[idxs] - self.current_out_mean,
-                )
+                if self.mean_centering:
+                    return (
+                        self.activations_in[idxs] - self.batchnorm_in.running_mean,
+                        self.activations_out[idxs] - self.batchnorm_out.running_mean,
+                    )
+                else:
+                    return (
+                        self.activations_in[idxs],
+                        self.activations_out[idxs],
+                    )
 
     def text_batch(self, batch_size=None):
         """
@@ -145,10 +165,12 @@ class ActivationBuffer:
                 if isinstance(hidden_states, tuple):
                     hidden_states = hidden_states[0]
                 hidden_states = hidden_states[tokens != self.model.tokenizer.pad_token_id]
+                if self.mean_centering:
+                    # we only need to update batchnorm's running estimates
+                    self.batchnorm(hidden_states)
                 self.activations = t.cat([self.activations, hidden_states.to("cpu")], dim=0)
                 self.read = t.zeros(len(self.activations)).bool()
                 pbar.update(len(hidden_states))
-        self.current_mean = self.activations.mean(dim=0)
 
     def _refresh_in_to_out(self):
         """
@@ -174,10 +196,14 @@ class ActivationBuffer:
                     tokens != self.model.tokenizer.pad_token_id
                 ]
                 if i == 0:
+                    if self.mean_centering:
+                        self.batchnorm_in(hidden_states)
                     self.activations_in = t.cat(
                         [self.activations_in, hidden_states.to("cpu")], dim=0
                     )
                 else:
+                    if self.mean_centering:
+                        self.batchnorm_out(hidden_states)
                     self.activations_out = t.cat(
                         [self.activations_out, hidden_states.to("cpu")], dim=0
                     )
