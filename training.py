@@ -6,6 +6,7 @@ import torch as t
 from .dictionary import AutoEncoder
 import os
 from tqdm import tqdm
+import wandb
 
 EPS = 1e-8
 
@@ -204,9 +205,18 @@ def trainSAE(
                 if ghost_threshold is None:
                     mse_loss, sparsity_loss = losses
                     print(f"step {step} MSE loss: {mse_loss}, sparsity loss: {sparsity_loss}")
+                    wandb.log({
+                        "mse_loss": mse_loss,
+                        "sparsity_loss": sparsity_loss,
+                    })
                 else:
                     mse_loss, sparsity_loss, ghost_loss = losses
                     print(f"step {step} MSE loss: {mse_loss}, sparsity loss: {sparsity_loss}, ghost_loss: {ghost_loss}")
+                    wandb.log({
+                        "mse_loss": mse_loss,
+                        "sparsity_loss": sparsity_loss,
+                        "ghost_loss": ghost_loss,
+                    })
                 # dict_acts = ae.encode(acts)
                 # print(f"step {step} % inactive: {(dict_acts == 0).all(dim=0).sum() / dict_acts.shape[-1]}")
                 # if isinstance(activations, ActivationBuffer):
