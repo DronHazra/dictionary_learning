@@ -3,7 +3,8 @@ Training dictionaries
 """
 
 import torch as t
-from .dictionary import AutoEncoder
+
+from .dictionary import AutoEncoder, OrthogonalAutoEncoder
 import os
 from tqdm import tqdm
 import wandb
@@ -160,15 +161,25 @@ def trainSAE(
         save_steps=None, # how often to save checkpoints
         save_dir=None, # directory for saving checkpoints
         log_steps=1000, # how often to print statistics
-        device='cpu'):
+        device='cpu',
+        orthogonal_encoder=False, # make the encoder orthogonal
+        orthogonal_decoder=False, # make the decoder orthogonal
+    ):
     """
     Train and return a sparse autoencoder
     """
-    ae = AutoEncoder(activation_dim, dictionary_size).to(device)
+    ae = OrthogonalAutoEncoder(
+        activation_dim, dictionary_size,
+        orthogonal_encoder=orthogonal_encoder,
+        orthogonal_decoder=orthogonal_decoder,
+    ).to(device)
+
     num_samples_since_activated = t.zeros(dictionary_size, dtype=int).to(device) # how many samples since each neuron was last activated?
 
     # set up optimizer and scheduler
-    optimizer = ConstrainedAdam(ae.parameters(), ae.decoder.parameters(), lr=lr)
+    optimizer = ConstrainedAdam(ae.parameters(), [] if orthogonal_decoder else ae.decoder.parameters(), lr=lr)
+    # we only need to constrain the decoder parameters if we're not using the
+    # orthogonal parametrization.
     if resample_steps is None:
         def warmup_fn(step):
             return min(step / warmup_steps, 1.)

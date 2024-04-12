@@ -76,7 +76,79 @@ class AutoEncoder(Dictionary, nn.Module):
                 return x_hat, x_ghost, f
             else:
                 return x_hat, x_ghost
-            
+
+class OrthogonalAutoEncoder(Dictionary, nn.Module):
+    """
+    A one-layer autoencoder with an optionally orthogonal encoder or decoder.
+    """
+
+    def __init__(
+        self,
+        activation_dim,
+        dict_size,
+        orthogonal_encoder: bool,
+        orthogonal_decoder: bool,
+    ):
+        super().__init__()
+        self.activation_dim = activation_dim
+        self.dict_size = dict_size
+        self.orthogonal_encoder = orthogonal_encoder
+        self.orthogonal_decoder = orthogonal_decoder
+
+        self.bias = nn.Parameter(t.zeros(activation_dim))
+
+        if orthogonal_encoder:
+            self.encoder = nn.utils.parametrizations.orthogonal(
+                nn.Linear(dict_size, activation_dim, bias=True)
+            )
+        else:
+            self.encoder = nn.Linear(activation_dim, dict_size, bias=True)
+        if orthogonal_decoder:
+            self.decoder = nn.utils.parametrizations.orthogonal(
+                nn.Linear(dict_size, activation_dim, bias=False)
+            )
+        else:
+            # rows of decoder weight matrix are unit vectors
+            self.decoder = nn.Linear(dict_size, activation_dim, bias=False)
+            dec_weight = t.randn_like(self.decoder.weight)
+            dec_weight = dec_weight / dec_weight.norm(dim=0, keepdim=True)
+            self.decoder.weight = nn.Parameter(dec_weight)
+
+    def encode(self, x):
+        return nn.ReLU()(self.encoder(x - self.bias))
+
+    def decode(self, f):
+        return self.decoder(f) + self.bias
+
+    def forward(self, x, output_features=False, ghost_mask=None):
+        """
+        Forward pass of an autoencoder.
+        x : activations to be autoencoded
+        output_features : if True, return the encoded features as well as the decoded x
+        ghost_mask : if not None, run this autoencoder in "ghost mode" where features are masked
+        """
+        if ghost_mask is None:  # normal mode
+            f = self.encode(x)
+            x_hat = self.decode(f)
+            if output_features:
+                return x_hat, f
+            else:
+                return x_hat
+
+        else:  # ghost mode
+            f_pre = self.encoder(x - self.bias)
+            f_ghost = t.exp(f_pre) * ghost_mask.to(f_pre)
+            f = nn.ReLU()(f_pre)
+
+            x_ghost = self.decoder(
+                f_ghost
+            )  # note that this only applies the decoder weight matrix, no bias
+            x_hat = self.decode(f)
+            if output_features:
+                return x_hat, x_ghost, f
+            else:
+                return x_hat, x_ghost
+
 class IdentityDict(Dictionary, nn.Module):
     """
     An identity dictionary, i.e. the identity function.
