@@ -76,6 +76,18 @@ class AutoEncoder(Dictionary, nn.Module):
                 return x_hat, x_ghost, f
             else:
                 return x_hat, x_ghost
+    @staticmethod
+    def from_pretrained(path, device=None):
+        """
+        Load a pretrained autoencoder from a file.
+        """
+        state_dict = t.load(path)
+        dict_size, activation_dim = state_dict['encoder.weight'].shape
+        autoencoder = AutoEncoder(activation_dim, dict_size)
+        autoencoder.load_state_dict(state_dict)
+        if device is not None:
+            autoencoder.to(device)
+        return autoencoder
 
 class OrthogonalAutoEncoder(Dictionary, nn.Module):
     """
@@ -149,11 +161,14 @@ class OrthogonalAutoEncoder(Dictionary, nn.Module):
             else:
                 return x_hat, x_ghost
 
+            
+    
+            
 class IdentityDict(Dictionary, nn.Module):
     """
     An identity dictionary, i.e. the identity function.
     """
-    def __init__(self, activation_dim):
+    def __init__(self, activation_dim=None):
         super().__init__()
         self.activation_dim = activation_dim
         self.dict_size = activation_dim
