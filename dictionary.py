@@ -44,6 +44,8 @@ class AutoEncoder(Dictionary, nn.Module):
         dec_weight = dec_weight / dec_weight.norm(dim=0, keepdim=True)
         self.decoder.weight = nn.Parameter(dec_weight)
 
+        self.batchnorm = nn.BatchNorm1d(activation_dim, affine=False)
+
     def encode(self, x):
         return nn.ReLU()(self.encoder(x - self.bias))
     
@@ -57,8 +59,10 @@ class AutoEncoder(Dictionary, nn.Module):
         output_features : if True, return the encoded features as well as the decoded x
         ghost_mask : if not None, run this autoencoder in "ghost mode" where features are masked
         """
+        _ = self.batchnorm(x)
+
         if ghost_mask is None: # normal mode
-            f = self.encode(x)
+            f = self.encode(x - self.batchnorm.running_mean)
             x_hat = self.decode(f)
             if output_features:
                 return x_hat, f
